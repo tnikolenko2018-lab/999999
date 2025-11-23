@@ -3,22 +3,26 @@ import logging
 import os
 from io import BytesIO
 
+# Импорт новых библиотек для работы с ботом и Gemini
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message
 from aiogram.filters import Command
-from PIL import Image # Новая библиотека для работы с изображениями
+from PIL import Image # Используем для обработки изображений для Gemini
 from google import genai
 from google.genai import types
 
-# Настройка логов
+# Включаем логирование
 logging.basicConfig(level=logging.INFO)
 
 # --- Инициализация и проверка переменных ---
+# Ключи берутся из переменных окружения Render
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") # Теперь ищем ключ Gemini
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") 
 
+# Проверка, что ключи установлены
 if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
-    raise ValueError("TELEGRAM_TOKEN или GEMINI_API_KEY не заданы в Variables.")
+    # Эта ошибка сработает, если вы не вставили ключи в переменные среды Render
+    raise ValueError("TELEGRAM_TOKEN или GEMINI_API_KEY не заданы в Environment Variables.")
 
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
@@ -28,7 +32,6 @@ try:
     client = genai.Client(api_key=GEMINI_API_KEY)
 except Exception as e:
     logging.error(f"Ошибка инициализации Gemini: {e}")
-    # Если ключ неверный, клиент не будет создан
     client = None
 
 # -------------------------------------------
@@ -36,7 +39,7 @@ except Exception as e:
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
     if not client:
-        await message.answer("Ошибка: Ключ Gemini API недействителен. Бот не может работать с AI.")
+        await message.answer("Ошибка: Ключ Gemini API недействителен. Бот не может работать с AI. Проверьте переменную GEMINI_API_KEY.")
         return
     await message.answer("Привет! Я твой AI-помощник на Gemini. 🚀\n"
                          "Пришли мне скриншот графика, и я его проанализирую.")
@@ -47,6 +50,7 @@ async def analyze_chart(message: Message):
         await message.answer("AI-сервис недоступен.")
         return
 
+    # Отправляем сообщение о начале анализа
     status_msg = await message.answer("🧐 Анализирую график с помощью Gemini...")
 
     try:
@@ -61,23 +65,25 @@ async def analyze_chart(message: Message):
         # 3. Формируем промпт и отправляем в Gemini Pro Vision
         prompt = [
             "Ты профессиональный трейдер и психолог. Твоя задача: 1. Оценить ситуацию на графике. 2. Если есть цифры баланса — прокомментировать. 3. Дать мотивацию и совет по рискам. Отвечай коротко, по делу и с эмодзи.",
-            image # Передаем объект изображения напрямую
+            image # Передаем объект изображения
         ]
 
         response = client.models.generate_content(
-            model="gemini-2.5-flash", # Модель для быстрой работы с изображениями
+            model="gemini-2.5-flash", # Оптимальная модель для быстрого Vision-анализа
             contents=prompt,
         )
 
-        # 4. Ответ
+        # 4. Ответ и удаление служебного сообщения
         await message.answer(response.text)
         await status_msg.delete()
 
     except Exception as e:
         logging.error(f"Ошибка при анализе: {e}")
-        await message.answer(f"Произошла ошибка при анализе: {e}. Проверь логи Railway.")
+        await message.answer(f"Произошла ошибка при анализе: {e}. Проверь логи Render.")
 
 async def main():
+    # ЭТА СТРОКА УДАЛЯЕТ СТАРЫЙ CONFLICT (Webhook) и позволяет боту запуститься
+    await bot.delete_webhook(drop_pending_updates=True) 
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
